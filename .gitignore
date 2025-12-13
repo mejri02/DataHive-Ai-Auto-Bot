@@ -1,0 +1,5 @@
+accounts.txt
+proxy.txt
+*.log
+__pycache__/
+.env
