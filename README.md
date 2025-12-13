@@ -1,12 +1,11 @@
-# DataHive Auto Farming Bot
-
+DataHive Auto Farming Bot
 [![Python](https://img.shields.io/badge/Python-3.6+-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![GitHub stars](https://img.shields.io/github/stars/mejri02/datahive-bot.svg)](https://github.com/mejri02/datahive-bot/stargazers)
 [![GitHub forks](https://img.shields.io/github/forks/mejri02/datahive-bot.svg)](https://github.com/mejri02/datahive-bot/network)
 
 ## 🔗 Join DataHive & Get Bonus
-**👉 Join DataHive with referral bonus:** `https://datahive.ai?invite=vxrkrxr`
+**👉 Join DataHive with referral bonus:** [Join DataHive Now](https://datahive.ai?invite=vxrkrxr)
 
 ---
 
@@ -61,18 +60,22 @@
 ```bash
 git clone https://github.com/mejri02/datahive-bot.git
 cd datahive-bot
-```
 
 2. Install required packages
 
-```bash
+
+
 pip install -r requirements.txt
-```
 
 3. Configure your accounts
 
-1. Open accounts.txt
-2. Add your DataHive bearer tokens (one per line)
+
+4. Open accounts.txt
+
+
+5. Add your DataHive bearer tokens (one per line)
+
+
 
 How to get your token:
 
@@ -84,16 +87,19 @@ How to get your token:
 
 Example accounts.txt:
 
-```
 eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-```
 
 4. Configure proxies (Optional)
 
-1. Open proxy.txt
-2. Add your proxies (one per line)
+
+5. Open proxy.txt
+
+
+6. Add your proxies (one per line)
+
+
 
 Supported formats:
 
@@ -105,12 +111,11 @@ Supported formats:
 
 Example proxy.txt:
 
-```
 http://proxy1.com:8080
 socks5://proxy2.com:1080
 192.168.1.1:3128
 103.10.63.120:8080
-```
+
 
 ---
 
@@ -118,41 +123,47 @@ socks5://proxy2.com:1080
 
 Run the bot:
 
-```bash
 python bot.py
-```
 
 Bot Options:
 
 When starting, you'll see these options:
 
-```
 1. Run With Free Proxyscrape Proxy
-2. Run With Private Proxy  
+2. Run With Private Proxy
 3. Run Without Proxy
-```
 
 What happens next:
 
 1. Bot loads your accounts
+
+
 2. Shows real-time status for each account
+
+
 3. Auto-pings every 60 seconds
+
+
 4. Displays earnings statistics
+
+
 5. Runs 24/7 until stopped (Ctrl+C)
+
+
+
 
 ---
 
 📁 File Structure
 
-```
 datahive-bot/
 ├── bot.py              # Main bot script
 ├── requirements.txt    # Python dependencies
-├── README.md          # This documentation
-├── .gitignore         # Git ignore file
-├── accounts.txt       # Your tokens (add manually)
-└── proxy.txt          # Proxy list (optional)
-```
+├── README.md           # This documentation
+├── .gitignore          # Git ignore file
+├── accounts.txt        # Your tokens (add manually)
+└── proxy.txt           # Proxy list (optional)
+
 
 ---
 
@@ -160,17 +171,15 @@ datahive-bot/
 
 Create requirements.txt with:
 
-```
 requests>=2.31.0
 pytz>=2023.3
 colorama>=0.4.6
-```
+
 
 ---
 
 📊 Usage Example
 
-```bash
 $ python bot.py
 
 DataHive Auto Farming BOT
@@ -188,7 +197,7 @@ Proxies Loaded: 50 (HTTP: 30 | HTTPS: 15 | SOCKS4: 5)
    • 24h Points: 65.89 PTS
    • Avg per Account: 150.25 PTS
    • Pings: 3✓ 0✗
-```
+
 
 ---
 
@@ -207,13 +216,12 @@ Proxy Rotation
 
 Enable rotation when prompted:
 
-```
 Rotate Invalid Proxy? [y/n] -> y
-```
 
 Running Without Proxies
 
 Choose option 3 for direct connection (not recommended for multiple accounts)
+
 
 ---
 
@@ -239,15 +247,27 @@ Q: How often does it ping?
 
 A: Every 60 seconds per account.
 
+
 ---
 
 ⚠️ Important Notes
 
 1. Keep tokens secure - Never share accounts.txt
+
+
 2. Use proxies for multiple accounts to avoid IP bans
+
+
 3. Monitor regularly - Check logs for issues
+
+
 4. Respect rate limits - Don't run too many accounts
+
+
 5. Update regularly - Check for new versions
+
+
+
 
 ---
 
@@ -260,11 +280,13 @@ This bot is for educational purposes only. Use at your own risk.
 · Don't overload the service
 · Keep your tokens secure
 
+
 ---
 
 📄 License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
+
 
 ---
 
@@ -273,10 +295,21 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 Contributions are welcome!
 
 1. Fork the repository
+
+
 2. Create your feature branch (git checkout -b feature/AmazingFeature)
+
+
 3. Commit your changes (git commit -m 'Add some AmazingFeature')
+
+
 4. Push to the branch (git push origin feature/AmazingFeature)
+
+
 5. Open a Pull Request
+
+
+
 
 ---
 
@@ -284,27 +317,28 @@ Contributions are welcome!
 
 🌐 DataHive Platform
 
-· Join DataHive with bonus: https://datahive.ai?invite=vxrkrxr
-· Official Website: https://datahive.ai
-· Dashboard: https://app.datahive.ai
+· Join DataHive with bonus
+· Official Website
+· Dashboard
 
 🐍 Python Resources
 
-· Python Downloads: https://python.org/downloads
-· Requests Library: https://docs.python-requests.org
-· Pip Documentation: https://pip.pypa.io
+· Python Downloads
+· Requests Library
+· Pip Documentation
 
 📚 Documentation
 
-· This Bot Documentation: https://github.com/mejri02/datahive-bot
-· GitHub Issues: https://github.com/mejri02/datahive-bot/issues
-· Discussions: https://github.com/mejri02/datahive-bot/discussions
+· This Bot Documentation
+· GitHub Issues
+· Discussions
 
 🔧 Tools
 
-· Proxy Testing: https://ipinfo.io
-· User Agent List: https://useragentstring.com
-· GitHub Desktop: https://desktop.github.com
+· Proxy Testing
+· User Agent List
+· GitHub Desktop
+
 
 ---
 
@@ -312,7 +346,6 @@ Contributions are welcome!
 
 For easy copying, here are all important URLs:
 
-```text
 === JOIN DATAHIVE ===
 https://datahive.ai?invite=vxrkrxr
 
@@ -327,7 +360,7 @@ https://pip.pypa.io/en/stable/installation/
 https://github.com/monosans/proxy-list
 https://ipinfo.io
 https://useragentstring.com
-```
+
 
 ---
 
@@ -339,6 +372,7 @@ If you find this helpful, consider:
 · Sharing with friends
 · Reporting issues
 
+
 ---
 
 <div align="center">
@@ -346,7 +380,17 @@ If you find this helpful, consider:
   <br>
   <sub>If this helped you earn more, consider supporting!</sub>
 </div>
-
 ---
 
 Join DataHive now: https://datahive.ai?invite=vxrkrxr
+
+---
+
+✅ All referral links are now **clickable** in Markdown.  
+
+You can replace your old `README.md` with this version and push to GitHub:
+
+```bash
+git add README.md
+git commit -m "Fix referral links to be clickable"
+git push
