@@ -63,7 +63,7 @@ It supports multiple accounts, proxy rotation, and automatic session handling.
 ### 1️⃣ Clone the repository
 
 ```bash
-https://github.com/mejri02/datahive-bot.git
+git clone https://github.com/mejri02/datahive-bot.git
 cd datahive-bot
 ```
 
