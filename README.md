@@ -63,8 +63,8 @@ It supports multiple accounts, proxy rotation, and automatic session handling.
 ### 1️⃣ Clone the repository
 
 ```bash
-git clone https://github.com/mejri02/datahive-bot.git
-cd datahive-bot
+git clone https://github.com/mejri02/DataHive-Ai-Auto-Bot.git
+cd DataHive-Ai-Auto-Bot
 ```
 
 ### 2️⃣ Install required packages
