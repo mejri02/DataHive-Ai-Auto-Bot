@@ -8,8 +8,11 @@ import uuid
 import platform
 import os
 import random
+import hashlib
+import threading
+from queue import Queue
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
-# Initialize colorama
 init(autoreset=True)
 
 class DataHiveBot:
@@ -19,67 +22,65 @@ class DataHiveBot:
         self.proxies = []
         self.proxy_index = 0
         self.account_proxies = {}
-        self.account_user_agents = {}  # Store user agent per account
-        self.failed_proxies = set()    # Track failed proxies
+        self.account_user_agents = {}
+        self.account_device_info = {}
+        self.failed_proxies = set()
+        self.session_cache = {}
+        self.lock = threading.Lock()
+        self.stats_lock = threading.Lock()
         
     def clear_terminal(self):
         os.system('cls' if os.name == 'nt' else 'clear')
         
-    def get_device_info(self):
-        """Generate device information awal (nanti akan di-update dari server)"""
-        return {
-            "device_id": str(uuid.uuid4()),
-            "os": f"{platform.system()} {platform.release()}",
-            "cpu_model": "Intel Core i5",
-            "cpu_arch": "x86_64",
-            "cpu_count": "4"
-        }
+    def generate_device_fingerprint(self, account_key):
+        base = f"{account_key}-{uuid.uuid4()}"
+        return hashlib.md5(base.encode()).hexdigest()
+
+    def get_persistent_device_info(self, account_key):
+        if account_key not in self.account_device_info:
+            device_id = str(uuid.uuid4())
+            self.account_device_info[account_key] = {
+                "device_id": device_id,
+                "os": f"{platform.system()} {platform.release()}",
+                "cpu_model": random.choice(["Intel Core i5-10400", "Intel Core i7-9700", "AMD Ryzen 5 3600", "Intel Core i5-11400"]),
+                "cpu_arch": "x86_64",
+                "cpu_count": str(random.choice([4, 6, 8])),
+                "fingerprint": self.generate_device_fingerprint(account_key)
+            }
+        return self.account_device_info[account_key]
 
     def get_user_agents(self):
-        """Return a list of realistic user agents"""
         return [
-            # Chrome Windows
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36",
-            
-            # Firefox Windows
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0",
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:120.0) Gecko/20100101 Firefox/120.0",
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:122.0) Gecko/20100101 Firefox/122.0",
-            
-            # Chrome Mac
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
-            
-            # Edge Windows
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 Edg/122.0.0.0",
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36 Edg/121.0.0.0",
-            
-            # Linux
             "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
             "Mozilla/5.0 (X11; Linux x86_64; rv:121.0) Gecko/20100101 Firefox/121.0",
         ]
 
     def get_random_user_agent_for_account(self, account_key):
-        """Get or assign a random user agent for an account"""
         if account_key not in self.account_user_agents:
             self.account_user_agents[account_key] = random.choice(self.get_user_agents())
         return self.account_user_agents[account_key]
 
     def get_headers(self, token, device_info, account_key=None):
-        """Generate headers dengan random user agent per account"""
         if account_key:
             user_agent = self.get_random_user_agent_for_account(account_key)
         else:
             user_agent = random.choice(self.get_user_agents())
         
-        # Extract browser info for sec-ch-ua headers
-        if "Chrome" in user_agent:
+        if "Chrome" in user_agent and "Edg" not in user_agent:
             browser = "Google Chrome"
-            version = user_agent.split("Chrome/")[1].split(".")[0] if "Chrome/" in user_agent else "142"
+            version = user_agent.split("Chrome/")[1].split(".")[0] if "Chrome/" in user_agent else "120"
             sec_ch_ua = f'"Chromium";v="{version}", "{browser}";v="{version}", "Not_A Brand";v="99"'
         elif "Firefox" in user_agent:
             browser = "Firefox"
@@ -90,53 +91,32 @@ class DataHiveBot:
             version = user_agent.split("Edg/")[1].split(".")[0] if "Edg/" in user_agent else "122"
             sec_ch_ua = f'"Chromium";v="{version}", "Microsoft Edge";v="{version}", "Not_A Brand";v="99"'
         else:
-            sec_ch_ua = '"Chromium";v="142", "Google Chrome";v="142", "Not_A Brand";v="99"'
+            sec_ch_ua = '"Chromium";v="120", "Google Chrome";v="120", "Not_A Brand";v="99"'
         
-        # Determine OS for sec-ch-ua-platform
         if "Windows" in user_agent:
             platform_os = "Windows"
-        elif "Macintosh" in user_agent:
-            platform_os = "macOS"
-        elif "Linux" in user_agent:
-            platform_os = "Linux"
-        else:
-            platform_os = "Windows"
-        
-        # Determine x-device-model based on user agent
-        if "Windows" in user_agent:
             device_model = "PC x86 - Chrome"
+            device_name = "windows pc"
+            device_os = "Windows 10.0.0"
             if "Firefox" in user_agent:
                 device_model = "PC x86 - Firefox"
             elif "Edg" in user_agent:
                 device_model = "PC x86 - Edge"
         elif "Macintosh" in user_agent:
+            platform_os = "macOS"
             device_model = "Mac - Chrome"
-        elif "Linux" in user_agent:
-            device_model = "Linux PC - Chrome"
-        else:
-            device_model = "PC x86 - Chrome 142"
-        
-        # Determine x-device-name
-        if "Windows" in user_agent:
-            device_name = "windows pc"
-        elif "Macintosh" in user_agent:
             device_name = "mac pc"
-        elif "Linux" in user_agent:
-            device_name = "linux pc"
-        else:
-            device_name = "windows pc"
-        
-        # Determine x-device-os
-        if "Windows NT 10.0" in user_agent:
-            device_os = "Windows 10.0.0"
-        elif "Windows NT 11.0" in user_agent:
-            device_os = "Windows 11.0.0"
-        elif "Macintosh" in user_agent:
             device_os = "macOS 10.15.7"
         elif "Linux" in user_agent:
+            platform_os = "Linux"
+            device_model = "Linux PC - Chrome"
+            device_name = "linux pc"
             device_os = "Linux 5.15.0"
         else:
-            device_os = "Windows 7.0.0"
+            platform_os = "Windows"
+            device_model = "PC x86 - Chrome"
+            device_name = "windows pc"
+            device_os = "Windows 10.0.0"
         
         return {
             "accept": "*/*",
@@ -145,6 +125,7 @@ class DataHiveBot:
             "authorization": f"Bearer {token}",
             "cache-control": "no-cache",
             "content-type": "application/json",
+            "origin": "chrome-extension://kpehiknhddgllkbmdkjeffonbhkfbfoe",
             "pragma": "no-cache",
             "priority": "u=1, i",
             "sec-ch-ua": sec_ch_ua,
@@ -152,12 +133,11 @@ class DataHiveBot:
             "sec-ch-ua-platform": f'"{platform_os}"',
             "sec-fetch-dest": "empty",
             "sec-fetch-mode": "cors",
-            "sec-fetch-site": "none",
-            "sec-fetch-storage-access": "active",
+            "sec-fetch-site": "cross-site",
             "user-agent": user_agent,
             "x-app-version": "0.2.5",
             "x-cpu-architecture": device_info["cpu_arch"],
-            "x-cpu-model": "DO-Regular",
+            "x-cpu-model": device_info["cpu_model"],
             "x-cpu-processor-count": device_info["cpu_count"],
             "x-device-id": device_info["device_id"],
             "x-device-model": device_model,
@@ -170,28 +150,25 @@ class DataHiveBot:
         }
 
     def get_wib_time(self):
-        """Mendapatkan waktu WIB saat ini"""
         return datetime.now(self.wib).strftime('%x %X %Z')
 
     def log(self, message):
-        """Print log dengan format timestamp"""
-        print(
-            f"{Fore.CYAN + Style.BRIGHT}[ {self.get_wib_time()} ]{Style.RESET_ALL}"
-            f"{Fore.WHITE + Style.BRIGHT} | {Style.RESET_ALL}{message}",
-            flush=True
-        )
+        with self.lock:
+            print(
+                f"{Fore.CYAN + Style.BRIGHT}[ {self.get_wib_time()} ]{Style.RESET_ALL}"
+                f"{Fore.WHITE + Style.BRIGHT} | {Style.RESET_ALL}{message}",
+                flush=True
+            )
 
     def print_banner(self):
-        """Menampilkan banner bot"""
         banner = f"""
         {Fore.GREEN + Style.BRIGHT}DataHive {Fore.BLUE + Style.BRIGHT}Auto Farming BOT
-        {Fore.WHITE + Style.DIM}Updated v0.2.5 (Auto Sync DeviceID + Random UA per Account)
-        {Fore.YELLOW + Style.DIM}Proxy Support: HTTP/HTTPS/SOCKS4/SOCKS5
+        {Fore.WHITE + Style.DIM}Enhanced v0.4.0 (Concurrent Multi-Threading System)
+        {Fore.YELLOW + Style.DIM}⚡ Parallel Processing + Anti-Detection
         """
         print(banner)
 
     def mask_email(self, email):
-        """Mask email untuk privacy"""
         if "@" in email:
             local, domain = email.split('@', 1)
             if len(local) <= 6:
@@ -202,8 +179,7 @@ class DataHiveBot:
         return email
 
     def print_account_info(self, account_num, email, proxy, ua_info, status_color, message):
-        """Print info per account dengan format cantik"""
-        proxy_display = f"{Fore.MAGENTA + Style.BRIGHT} - {Style.RESET_ALL}{Fore.CYAN + Style.BRIGHT}Proxy: {Style.RESET_ALL}{Fore.WHITE + Style.BRIGHT}{proxy}{Style.RESET_ALL}" if proxy else ""
+        proxy_display = f"{Fore.MAGENTA + Style.BRIGHT} - {Style.RESET_ALL}{Fore.CYAN + Style.BRIGHT}Proxy: {Style.RESET_ALL}{Fore.WHITE + Style.BRIGHT}{proxy[:30]}...{Style.RESET_ALL}" if proxy else ""
         ua_display = f"{Fore.MAGENTA + Style.BRIGHT} - {Style.RESET_ALL}{Fore.CYAN + Style.BRIGHT}UA: {Style.RESET_ALL}{Fore.WHITE + Style.BRIGHT}{ua_info}{Style.RESET_ALL}" if ua_info else ""
         
         self.log(
@@ -218,7 +194,6 @@ class DataHiveBot:
         )
 
     def load_accounts(self, filename="accounts.txt"):
-        """Membaca token dari file accounts.txt"""
         try:
             with open(filename, 'r') as f:
                 tokens = [line.strip() for line in f if line.strip()]
@@ -232,13 +207,12 @@ class DataHiveBot:
             return []
 
     def load_proxies(self, use_proxy_choice: int):
-        """Load proxies dari file atau URL dengan format yang lebih baik"""
         filename = "proxy.txt"
         loaded_proxies = []
         
         try:
             if use_proxy_choice == 1:
-                self.log(f"{Fore.YELLOW + Style.BRIGHT}Downloading proxies from Proxyscrape...{Style.RESET_ALL}")
+                self.log(f"{Fore.YELLOW + Style.BRIGHT}Downloading proxies...{Style.RESET_ALL}")
                 response = requests.get("https://raw.githubusercontent.com/monosans/proxy-list/refs/heads/main/proxies/all.txt", timeout=30)
                 response.raise_for_status()
                 content = response.text
@@ -256,7 +230,6 @@ class DataHiveBot:
                 self.log(f"{Fore.RED + Style.BRIGHT}No Proxies Found.{Style.RESET_ALL}")
                 return []
             
-            # Clean and validate proxies
             for proxy in raw_proxies:
                 cleaned_proxy = self.validate_and_format_proxy(proxy)
                 if cleaned_proxy:
@@ -264,7 +237,6 @@ class DataHiveBot:
             
             self.proxies = loaded_proxies
             
-            # Stats
             http_count = sum(1 for p in loaded_proxies if p.startswith("http://"))
             https_count = sum(1 for p in loaded_proxies if p.startswith("https://"))
             socks4_count = sum(1 for p in loaded_proxies if p.startswith("socks4://"))
@@ -286,133 +258,96 @@ class DataHiveBot:
             return []
 
     def validate_and_format_proxy(self, proxy_str):
-        """Validate and format proxy string with correct scheme"""
         proxy_str = proxy_str.strip()
         
-        # Skip empty lines
         if not proxy_str:
             return None
         
-        # Already has scheme
         schemes = ["http://", "https://", "socks4://", "socks5://", "socks4h://", "socks5h://"]
         for scheme in schemes:
             if proxy_str.startswith(scheme):
                 return proxy_str
         
-        # Check if it's IP:PORT format
         if ":" in proxy_str and not proxy_str.startswith("["):
             parts = proxy_str.split(":")
             if len(parts) >= 2:
                 ip = parts[0]
                 port = parts[1]
                 
-                # Try to determine best scheme based on port
                 try:
                     port_num = int(port)
                     if port_num == 80:
                         return f"http://{ip}:{port}"
                     elif port_num == 443:
                         return f"https://{ip}:{port}"
+                    elif port_num in [1080, 9050]:
+                        return f"socks5://{ip}:{port}"
                     else:
-                        # Try HTTP first, then SOCKS
                         return f"http://{ip}:{port}"
                 except:
                     return f"http://{proxy_str}"
         
-        # Default to HTTP
         return f"http://{proxy_str}"
 
-    def test_proxy(self, proxy, timeout=5):
-        """Test if a proxy is working"""
-        try:
-            test_url = "http://httpbin.org/ip"
-            proxies = {"http": proxy, "https": proxy}
-            response = requests.get(test_url, proxies=proxies, timeout=timeout)
-            if response.status_code == 200:
-                return True
-        except:
-            pass
-        return False
-
     def get_next_proxy_for_account(self, account):
-        """Get a working proxy for account tertentu dengan testing"""
-        if account not in self.account_proxies:
+        with self.lock:
+            if account not in self.account_proxies:
+                if not self.proxies:
+                    return None
+                
+                attempts = 0
+                while attempts < 5 and len(self.proxies) > 0:
+                    proxy = self.proxies[self.proxy_index]
+                    
+                    if proxy in self.failed_proxies:
+                        self.proxy_index = (self.proxy_index + 1) % len(self.proxies)
+                        attempts += 1
+                        continue
+                    
+                    self.account_proxies[account] = proxy
+                    self.proxy_index = (self.proxy_index + 1) % len(self.proxies)
+                    return proxy
+                
+                if len(self.proxies) > 0:
+                    proxy = self.proxies[self.proxy_index]
+                    self.account_proxies[account] = proxy
+                    self.proxy_index = (self.proxy_index + 1) % len(self.proxies)
+                    return proxy
+            
+            return self.account_proxies.get(account)
+
+    def rotate_proxy_for_account(self, account):
+        with self.lock:
             if not self.proxies:
                 return None
             
-            # Try up to 5 proxies to find a working one
+            current_proxy = self.account_proxies.get(account)
+            if current_proxy:
+                self.failed_proxies.add(current_proxy)
+            
             attempts = 0
-            while attempts < 5 and len(self.proxies) > 0:
+            while attempts < len(self.proxies):
                 proxy = self.proxies[self.proxy_index]
                 
-                # Skip known failed proxies
                 if proxy in self.failed_proxies:
                     self.proxy_index = (self.proxy_index + 1) % len(self.proxies)
                     attempts += 1
                     continue
                 
-                # Test proxy (optional - can be commented out for speed)
-                # if self.test_proxy(proxy):
                 self.account_proxies[account] = proxy
                 self.proxy_index = (self.proxy_index + 1) % len(self.proxies)
+                
+                self.log(f"{Fore.YELLOW + Style.BRIGHT}[ {account} ] Proxy rotated{Style.RESET_ALL}")
                 return proxy
-                # else:
-                #     self.failed_proxies.add(proxy)
-                #     self.proxy_index = (self.proxy_index + 1) % len(self.proxies)
                 
                 attempts += 1
             
-            # If no working proxy found, use the next one anyway
-            if len(self.proxies) > 0:
-                proxy = self.proxies[self.proxy_index]
-                self.account_proxies[account] = proxy
-                self.proxy_index = (self.proxy_index + 1) % len(self.proxies)
-                return proxy
-        
-        return self.account_proxies.get(account)
-
-    def rotate_proxy_for_account(self, account):
-        """Rotate proxy untuk account tertentu dengan testing"""
-        if not self.proxies:
-            return None
-        
-        # Mark current proxy as failed
-        current_proxy = self.account_proxies.get(account)
-        if current_proxy:
-            self.failed_proxies.add(current_proxy)
-        
-        # Find new working proxy
-        attempts = 0
-        while attempts < len(self.proxies):
             proxy = self.proxies[self.proxy_index]
-            
-            # Skip known failed proxies
-            if proxy in self.failed_proxies:
-                self.proxy_index = (self.proxy_index + 1) % len(self.proxies)
-                attempts += 1
-                continue
-            
-            # Test proxy (optional)
-            # if self.test_proxy(proxy):
             self.account_proxies[account] = proxy
             self.proxy_index = (self.proxy_index + 1) % len(self.proxies)
-            
-            self.log(f"{Fore.YELLOW + Style.BRIGHT}[ {account} ] Proxy rotated to: {proxy}{Style.RESET_ALL}")
             return proxy
-            # else:
-            #     self.failed_proxies.add(proxy)
-            #     self.proxy_index = (self.proxy_index + 1) % len(self.proxies)
-            
-            attempts += 1
-        
-        # If all proxies failed, use the next one anyway
-        proxy = self.proxies[self.proxy_index]
-        self.account_proxies[account] = proxy
-        self.proxy_index = (self.proxy_index + 1) % len(self.proxies)
-        return proxy
 
     def print_question(self):
-        """Tanya user mau pakai proxy atau tidak"""
         while True:
             try:
                 print(f"\n{Fore.CYAN + Style.BRIGHT}{'='*60}{Style.RESET_ALL}")
@@ -448,7 +383,6 @@ class DataHiveBot:
         return choose, rotate
 
     def get_worker_info(self, token, device_info, account_num, email, proxy=None, account_key=None):
-        """Mendapatkan informasi worker"""
         try:
             url = f"{self.base_url}/worker"
             headers = self.get_headers(token, device_info, account_key)
@@ -465,7 +399,6 @@ class DataHiveBot:
                     user = data['user']
                     total_points = user.get('points', 0)
                     
-                    # Get UA info for display
                     ua_info = self.get_user_agent_info(headers["user-agent"])
                     
                     self.print_account_info(
@@ -492,7 +425,6 @@ class DataHiveBot:
             return None
 
     def get_user_agent_info(self, user_agent):
-        """Extract browser info from user agent for display"""
         if "Chrome" in user_agent and "Edg" not in user_agent:
             if "Windows" in user_agent:
                 return "Chrome/Win"
@@ -510,7 +442,6 @@ class DataHiveBot:
             return "Browser"
 
     def ping_uptime(self, token, device_info, account_num, email, proxy=None, account_key=None):
-        """Ping uptime - endpoint utama untuk farming"""
         try:
             url = f"{self.base_url}/ping/uptime"
             headers = self.get_headers(token, device_info, account_key)
@@ -532,8 +463,30 @@ class DataHiveBot:
             self.print_account_info(account_num, email, proxy, ua_info, Fore.RED, f"PING Failed: {str(e)}")
             return False
 
+    def send_heartbeat(self, token, device_info, account_num, email, proxy=None, account_key=None):
+        try:
+            url = f"{self.base_url}/heartbeat"
+            headers = self.get_headers(token, device_info, account_key)
+            proxies = {"http": proxy, "https": proxy} if proxy else None
+            
+            payload = {
+                "timestamp": int(time.time() * 1000),
+                "deviceId": device_info["device_id"]
+            }
+            
+            response = requests.post(url, headers=headers, json=payload, proxies=proxies, timeout=30)
+            
+            if response.status_code == 200:
+                ua_info = self.get_user_agent_info(headers["user-agent"])
+                self.print_account_info(account_num, email, proxy, ua_info, Fore.GREEN, "Heartbeat Sent")
+                return True
+            else:
+                return False
+                
+        except Exception as e:
+            return False
+
     def check_worker_ip(self, token, device_info, account_num, email, proxy=None, account_key=None):
-        """Check worker IP"""
         try:
             url = f"{self.base_url}/network/worker-ip"
             headers = self.get_headers(token, device_info, account_key)
@@ -557,19 +510,157 @@ class DataHiveBot:
             self.print_account_info(account_num, email, proxy, ua_info, Fore.RED, f"IP Check Failed: {str(e)}")
             return False
 
+    def register_worker(self, token, device_info, account_num, email, proxy=None, account_key=None):
+        try:
+            url = f"{self.base_url}/worker/register"
+            headers = self.get_headers(token, device_info, account_key)
+            proxies = {"http": proxy, "https": proxy} if proxy else None
+            
+            payload = {
+                "deviceId": device_info["device_id"],
+                "deviceModel": headers["x-device-model"],
+                "deviceOs": headers["x-device-os"],
+                "cpuModel": device_info["cpu_model"],
+                "cpuArchitecture": device_info["cpu_arch"],
+                "cpuProcessorCount": device_info["cpu_count"]
+            }
+            
+            response = requests.post(url, headers=headers, json=payload, proxies=proxies, timeout=30)
+            
+            if response.status_code in [200, 201]:
+                ua_info = self.get_user_agent_info(headers["user-agent"])
+                self.print_account_info(account_num, email, proxy, ua_info, Fore.GREEN, "Worker Registered")
+                return True
+            else:
+                return False
+                
+        except Exception as e:
+            return False
+
+    def process_worker_cycle(self, worker, rotate_proxy, use_proxy):
+        account_key = worker['account_key']
+        proxy = worker.get('proxy')
+        
+        random_delay = random.uniform(0.5, 2.5)
+        time.sleep(random_delay)
+        
+        uptime_ok = self.ping_uptime(
+            worker['token'], 
+            worker['device_info'], 
+            worker['num'], 
+            worker['email'], 
+            proxy, 
+            account_key
+        )
+        
+        result = {
+            'success': uptime_ok,
+            'points': 0,
+            'points_24h': 0
+        }
+        
+        if uptime_ok:
+            time.sleep(random.uniform(0.8, 1.5))
+            self.send_heartbeat(
+                worker['token'], 
+                worker['device_info'], 
+                worker['num'], 
+                worker['email'], 
+                proxy, 
+                account_key
+            )
+            
+            time.sleep(random.uniform(0.8, 1.5))
+            self.check_worker_ip(
+                worker['token'], 
+                worker['device_info'], 
+                worker['num'], 
+                worker['email'], 
+                proxy, 
+                account_key
+            )
+        else:
+            if rotate_proxy and use_proxy:
+                new_proxy = self.rotate_proxy_for_account(account_key)
+                worker['proxy'] = new_proxy
+                proxy = new_proxy
+                
+                time.sleep(random.uniform(0.5, 1.2))
+                uptime_ok = self.ping_uptime(
+                    worker['token'], 
+                    worker['device_info'], 
+                    worker['num'], 
+                    worker['email'], 
+                    proxy, 
+                    account_key
+                )
+                
+                if uptime_ok:
+                    time.sleep(random.uniform(0.8, 1.5))
+                    self.send_heartbeat(
+                        worker['token'], 
+                        worker['device_info'], 
+                        worker['num'], 
+                        worker['email'], 
+                        proxy, 
+                        account_key
+                    )
+                    time.sleep(random.uniform(0.8, 1.5))
+                    self.check_worker_ip(
+                        worker['token'], 
+                        worker['device_info'], 
+                        worker['num'], 
+                        worker['email'], 
+                        proxy, 
+                        account_key
+                    )
+        
+        time.sleep(random.uniform(0.5, 1.2))
+        worker_info = self.get_worker_info(
+            worker['token'], 
+            worker['device_info'], 
+            worker['num'], 
+            worker['email'], 
+            proxy, 
+            account_key
+        )
+        
+        if worker_info:
+            if 'user' in worker_info:
+                result['points'] = worker_info['user'].get('points', 0)
+            result['points_24h'] = worker_info.get('points24h', 0)
+        
+        return result
+
+    def run_concurrent_cycle(self, active_workers, rotate_proxy, use_proxy, max_workers=10):
+        self.log(f"{Fore.BLUE + Style.BRIGHT}⚡ Starting concurrent ping cycle for {len(active_workers)} accounts...{Style.RESET_ALL}")
+        
+        results = []
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {
+                executor.submit(self.process_worker_cycle, worker, rotate_proxy, use_proxy): worker 
+                for worker in active_workers
+            }
+            
+            for future in as_completed(futures):
+                try:
+                    result = future.result()
+                    results.append(result)
+                except Exception as e:
+                    self.log(f"{Fore.RED + Style.BRIGHT}Thread error: {e}{Style.RESET_ALL}")
+        
+        return results
+
     def run(self):
-        """Menjalankan bot"""
         self.clear_terminal()
         self.print_banner()
         
-        # Load accounts
         tokens = self.load_accounts()
         
         if not tokens:
             self.log(f"{Fore.RED + Style.BRIGHT}No Accounts Loaded.{Style.RESET_ALL}")
             return
         
-        # Tanya proxy
         use_proxy_choice, rotate_proxy = self.print_question()
         
         use_proxy = False
@@ -588,19 +679,17 @@ class DataHiveBot:
         
         self.log(f"{Fore.CYAN + Style.BRIGHT}={'='*75}{Style.RESET_ALL}")
         
-        # Setup worker untuk setiap akun
         active_workers = []
+        
+        self.log(f"{Fore.YELLOW + Style.BRIGHT}🔧 Initializing workers...{Style.RESET_ALL}")
         
         for i, token in enumerate(tokens, 1):
             account_key = f"account_{i}"
             
-            # Generate temporary random device info
-            device_info = self.get_device_info()
+            device_info = self.get_persistent_device_info(account_key)
             
-            # Get proxy untuk account ini
             proxy = self.get_next_proxy_for_account(account_key) if use_proxy else None
             
-            # Get worker info dulu untuk ambil email asli DAN DEVICE ID asli dari server
             try:
                 headers = self.get_headers(token, device_info, account_key)
                 proxies = {"http": proxy, "https": proxy} if proxy else None
@@ -616,10 +705,10 @@ class DataHiveBot:
                 worker_data = response.json()
                 real_email = worker_data.get('user', {}).get('email', f'unknown{i}@email.com')
                 
-                # Update device ID dari response server
                 server_device_id = worker_data.get('deviceId')
                 if server_device_id:
                     device_info['device_id'] = server_device_id
+                    self.account_device_info[account_key]['device_id'] = server_device_id
                 
             except Exception as e:
                 ua_info = self.get_user_agent_info(self.get_headers(token, device_info, account_key)["user-agent"])
@@ -628,7 +717,6 @@ class DataHiveBot:
                     proxy = self.rotate_proxy_for_account(account_key)
                 continue
             
-            # Sekarang tampilkan info dengan email yang benar
             if worker_data:
                 points_24h = worker_data.get('points24h', 0)
                 total_points = worker_data.get('user', {}).get('points', 0)
@@ -653,25 +741,19 @@ class DataHiveBot:
                     'device_info': device_info,
                     'email': real_email,
                     'proxy': proxy,
-                    'account_key': account_key
+                    'account_key': account_key,
+                    'ping_interval': random.randint(58, 62)
                 })
                 
-                # Ping pertama kali
-                self.ping_uptime(token, device_info, i, real_email, proxy, account_key)
-                time.sleep(1)
-                self.check_worker_ip(token, device_info, i, real_email, proxy, account_key)
-            
-            self.log(f"{Fore.CYAN + Style.BRIGHT}={'='*75}{Style.RESET_ALL}")
-            time.sleep(2)
+                time.sleep(0.5)
         
-        # Summary
         if not active_workers:
             self.log(f"{Fore.RED + Style.BRIGHT}No Active Workers.{Style.RESET_ALL}")
             return
-            
+        
+        self.log(f"{Fore.CYAN + Style.BRIGHT}={'='*75}{Style.RESET_ALL}")
         self.log(f"{Fore.GREEN + Style.BRIGHT}Active Workers: {Style.RESET_ALL}{Fore.WHITE + Style.BRIGHT}{len(active_workers)}{Style.RESET_ALL}")
         
-        # Show user agent distribution
         ua_distribution = {}
         for worker in active_workers:
             ua = self.account_user_agents.get(worker['account_key'], "Unknown")
@@ -684,68 +766,93 @@ class DataHiveBot:
         
         self.log(f"{Fore.CYAN + Style.BRIGHT}={'='*75}{Style.RESET_ALL}")
         
-        # Auto farming loop
+        self.log(f"{Fore.YELLOW + Style.BRIGHT}🚀 Starting initial registration and ping...{Style.RESET_ALL}")
+        
+        def init_worker(worker):
+            time.sleep(random.uniform(0.2, 1.5))
+            self.register_worker(
+                worker['token'], 
+                worker['device_info'], 
+                worker['num'], 
+                worker['email'], 
+                worker['proxy'], 
+                worker['account_key']
+            )
+            time.sleep(random.uniform(0.5, 1.2))
+            self.ping_uptime(
+                worker['token'], 
+                worker['device_info'], 
+                worker['num'], 
+                worker['email'], 
+                worker['proxy'], 
+                worker['account_key']
+            )
+            time.sleep(random.uniform(0.5, 1.2))
+            self.send_heartbeat(
+                worker['token'], 
+                worker['device_info'], 
+                worker['num'], 
+                worker['email'], 
+                worker['proxy'], 
+                worker['account_key']
+            )
+            time.sleep(random.uniform(0.5, 1.2))
+            self.check_worker_ip(
+                worker['token'], 
+                worker['device_info'], 
+                worker['num'], 
+                worker['email'], 
+                worker['proxy'], 
+                worker['account_key']
+            )
+        
+        with ThreadPoolExecutor(max_workers=min(10, len(active_workers))) as executor:
+            executor.map(init_worker, active_workers)
+        
+        self.log(f"{Fore.CYAN + Style.BRIGHT}={'='*75}{Style.RESET_ALL}")
+        self.log(f"{Fore.GREEN + Style.BRIGHT}✅ Initial setup complete. Starting farming loop...{Style.RESET_ALL}")
+        self.log(f"{Fore.CYAN + Style.BRIGHT}={'='*75}{Style.RESET_ALL}")
+        
         ping_count = 0
         
         try:
             while True:
-                print(
-                    f"{Fore.CYAN + Style.BRIGHT}[ {self.get_wib_time()} ]{Style.RESET_ALL}"
-                    f"{Fore.WHITE + Style.BRIGHT} | {Style.RESET_ALL}"
-                    f"{Fore.BLUE + Style.BRIGHT}Try to Sent Ping...{Style.RESET_ALL}",
-                    end="\r",
-                    flush=True
-                )
+                avg_interval = sum(w['ping_interval'] for w in active_workers) / len(active_workers)
                 
-                time.sleep(60)
+                for remaining in range(int(avg_interval), 0, -1):
+                    print(
+                        f"{Fore.CYAN + Style.BRIGHT}[ {self.get_wib_time()} ]{Style.RESET_ALL}"
+                        f"{Fore.WHITE + Style.BRIGHT} | {Style.RESET_ALL}"
+                        f"{Fore.BLUE + Style.BRIGHT}⏳ Next cycle in {remaining}s...{Style.RESET_ALL}",
+                        end="\r",
+                        flush=True
+                    )
+                    time.sleep(1)
+                
+                print(" " * 100, end="\r")
+                
                 ping_count += 1
                 
-                total_points_session = 0
-                total_points_24h = 0
-                successful_pings = 0
-                failed_pings = 0
+                start_time = time.time()
+                results = self.run_concurrent_cycle(active_workers, rotate_proxy, use_proxy, max_workers=min(15, len(active_workers)))
+                cycle_duration = time.time() - start_time
                 
-                for worker in active_workers:
-                    proxy = worker.get('proxy')
-                    account_key = worker['account_key']
-                    
-                    # Ping uptime
-                    uptime_ok = self.ping_uptime(worker['token'], worker['device_info'], worker['num'], worker['email'], proxy, account_key)
-                    
-                    if uptime_ok:
-                        successful_pings += 1
-                    else:
-                        failed_pings += 1
-                    
-                    # Jika ping gagal dan rotate enabled, coba proxy baru
-                    if not uptime_ok and rotate_proxy and use_proxy:
-                        new_proxy = self.rotate_proxy_for_account(account_key)
-                        worker['proxy'] = new_proxy
-                        proxy = new_proxy
-                        time.sleep(1)
-                        uptime_ok = self.ping_uptime(worker['token'], worker['device_info'], worker['num'], worker['email'], proxy, account_key)
-                    
-                    # IP check
-                    if uptime_ok:
-                        time.sleep(1)
-                        self.check_worker_ip(worker['token'], worker['device_info'], worker['num'], worker['email'], proxy, account_key)
-                    
-                    # Get worker info
-                    time.sleep(1)
-                    worker_info = self.get_worker_info(worker['token'], worker['device_info'], worker['num'], worker['email'], proxy, account_key)
-                    if worker_info:
-                        if 'user' in worker_info:
-                            total_points_session += worker_info['user'].get('points', 0)
-                        total_points_24h += worker_info.get('points24h', 0)
-                    
-                    self.log(f"{Fore.CYAN + Style.BRIGHT}={'='*75}{Style.RESET_ALL}")
-                    time.sleep(2)
+                successful_pings = sum(1 for r in results if r['success'])
+                failed_pings = len(results) - successful_pings
+                total_points_session = sum(r['points'] for r in results)
+                total_points_24h = sum(r['points_24h'] for r in results)
                 
-                # Tampilkan total points dan stats
+                self.log(f"{Fore.CYAN + Style.BRIGHT}={'='*75}{Style.RESET_ALL}")
+                
                 if total_points_session > 0:
                     avg_points = total_points_session / len(active_workers)
                     self.log(
-                        f"{Fore.GREEN + Style.BRIGHT}💰 Session #{ping_count} Summary:{Style.RESET_ALL}"
+                        f"{Fore.GREEN + Style.BRIGHT}💰 Cycle #{ping_count} Summary:{Style.RESET_ALL}"
+                    )
+                    self.log(
+                        f"{Fore.CYAN + Style.BRIGHT}   • Duration: {Style.RESET_ALL}"
+                        f"{Fore.WHITE + Style.BRIGHT}{cycle_duration:.2f}s{Style.RESET_ALL}"
+                        f"{Fore.CYAN + Style.BRIGHT} (⚡ {len(active_workers)/cycle_duration:.1f} accounts/s){Style.RESET_ALL}"
                     )
                     self.log(
                         f"{Fore.CYAN + Style.BRIGHT}   • Total Points: {Style.RESET_ALL}"
@@ -760,17 +867,11 @@ class DataHiveBot:
                         f"{Fore.YELLOW + Style.BRIGHT}{avg_points:.2f} PTS{Style.RESET_ALL}"
                     )
                     self.log(
-                        f"{Fore.CYAN + Style.BRIGHT}   • Pings: {Style.RESET_ALL}"
-                        f"{Fore.GREEN}{successful_pings}✓ {Fore.RED}{failed_pings}✗{Style.RESET_ALL}"
+                        f"{Fore.CYAN + Style.BRIGHT}   • Success Rate: {Style.RESET_ALL}"
+                        f"{Fore.GREEN}{successful_pings}✓ {Fore.RED}{failed_pings}✗ {Style.RESET_ALL}"
+                        f"{Fore.WHITE}({(successful_pings/len(active_workers)*100):.1f}%){Style.RESET_ALL}"
                     )
                     self.log(f"{Fore.CYAN + Style.BRIGHT}={'='*75}{Style.RESET_ALL}")
-                
-                print(
-                    f"{Fore.CYAN + Style.BRIGHT}[ {self.get_wib_time()} ]{Style.RESET_ALL}"
-                    f"{Fore.WHITE + Style.BRIGHT} | {Style.RESET_ALL}"
-                    f"{Fore.BLUE + Style.BRIGHT}Wait For 60 Seconds For Next Ping...{Style.RESET_ALL}",
-                    end="\r"
-                )
                 
         except KeyboardInterrupt:
             print(
@@ -779,15 +880,17 @@ class DataHiveBot:
                 f"{Fore.RED + Style.BRIGHT}[ EXIT ] DataHive - BOT{Style.RESET_ALL}                                       "
             )
             
-            total_pings = ping_count * len(active_workers) * 2
+            total_pings = ping_count * len(active_workers) * 3
             self.log(
                 f"{Fore.YELLOW + Style.BRIGHT}📊 Final Statistics:{Style.RESET_ALL}\n"
-                f"{Fore.CYAN + Style.BRIGHT}   • Total Sessions: {Style.RESET_ALL}"
+                f"{Fore.CYAN + Style.BRIGHT}   • Total Cycles: {Style.RESET_ALL}"
                 f"{Fore.WHITE + Style.BRIGHT}{ping_count}{Style.RESET_ALL}\n"
                 f"{Fore.CYAN + Style.BRIGHT}   • Active Accounts: {Style.RESET_ALL}"
                 f"{Fore.WHITE + Style.BRIGHT}{len(active_workers)}{Style.RESET_ALL}\n"
                 f"{Fore.CYAN + Style.BRIGHT}   • Total API Calls: {Style.RESET_ALL}"
-                f"{Fore.WHITE + Style.BRIGHT}{total_pings}{Style.RESET_ALL}"
+                f"{Fore.WHITE + Style.BRIGHT}{total_pings}{Style.RESET_ALL}\n"
+                f"{Fore.CYAN + Style.BRIGHT}   • Mode: {Style.RESET_ALL}"
+                f"{Fore.GREEN + Style.BRIGHT}Concurrent Multi-Threading{Style.RESET_ALL}"
             )
 
 if __name__ == "__main__":
